@@ -18,6 +18,7 @@ from misc.utils import MinkLocParams, get_datetime
 from models.loss import make_loss
 from models.model_factory import model_factory
 from models.minkloc_multimodal import MinkLocMultimodal
+from gnn_loss import SmoothAP
 
 
 VERBOSE = False
@@ -126,7 +127,10 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
 
     print("Model device: {}".format(device))
 
+    import torch.nn as nn
     loss_fn = make_loss(params)
+    cos = nn.CosineSimilarity(dim=1).cuda()
+    smoothAP = SmoothAP()
 
     params_l = []
     if isinstance(model, MinkLocMultimodal):
@@ -233,7 +237,13 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
                 with torch.set_grad_enabled(phase == "train"):
                     # Compute embeddings of all elements
                     embeddings = model(batch)
-                    print(embeddings[""].shape)
+
+                    query_embeddings = torch.repeat_interleave(
+                        embeddings["embedding"][0].unsqueeze(0), batch["positives_mask"].shape[0] - 1, 0
+                    )
+                    database_embeddings = embeddings["embedding"][1 : batch["positives_mask"].shape[0]]
+                    sim_mat = cos(query_embeddings, database_embeddings)
+                    print(smoothAP(sim_mat, positives_mask[0].unsqueeze(0)))
                     loss, temp_stats, _ = loss_fn(
                         embeddings, positives_mask, negatives_mask
                     )

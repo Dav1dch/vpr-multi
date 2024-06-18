@@ -222,7 +222,7 @@ class SmoothAP(torch.nn.Module):
             else torch.sum(ndcgs) / (len(ndcgs))
         )
 
-    def forward(self, sim_all, pos_mask_, gt_iou):
+    def forward(self, sim_all, pos_mask_):
         """Forward pass for all input predictions: preds - (batch_size x feat_dims)"""
         """_summary_
 

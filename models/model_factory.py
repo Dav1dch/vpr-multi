@@ -33,33 +33,6 @@ def model_factory(params: MinkLocParams):
         model = MinkLocMultimodal(
             None, 0, image_fe, image_fe_size, output_dim=image_fe_size
         )
-    elif params.model_params.model == "sec":
-        image_fe_size = 256
-        image_fe = sec()
-        model = MinkLocMultimodal(
-            None, 0, image_fe, image_fe_size, output_dim=image_fe_size
-        )
-
-    elif params.model_params.model == "fpn":
-        image_fe_size = 256
-        image_fe = fpn2()
-        model = MinkLocMultimodal(
-            None, 0, image_fe, image_fe_size, output_dim=image_fe_size
-        )
-    elif params.model_params.model == "vit":
-        image_fe_size = 256
-        image_fe = ViTSec(
-            num_classes=1000,
-            dim=1000,
-            depth=6,
-            heads=16,
-            mlp_dim=2048,
-            dropout=0.05,
-            emb_dropout=0.05,
-        )
-        model = MinkLocMultimodal(
-            None, 0, image_fe, image_fe_size, output_dim=image_fe_size
-        )
     else:
         raise NotImplementedError(
             "Model not implemented: {}".format(params.model_params.model)
