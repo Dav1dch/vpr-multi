@@ -165,7 +165,7 @@ def get_latent_vectors(model, set, device, params):
             if params.use_rgb:
                 batch["images"] = x.unsqueeze(0).to(device)
 
-            x = model(batch)
+            x = model(batch, False)
             embedding = x["embedding"]
 
             # embedding is (1, 256) tensor

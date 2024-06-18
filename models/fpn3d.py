@@ -221,7 +221,7 @@ class FPN3d(nn.Module):
 
         self.gnn = myGNN(256, 256, 128)
 
-    def forward(self, x):
+    def forward(self, x, flag=True):
         x = x["images"]
         # x = x
         # Bottom-up using backbone
@@ -240,5 +240,6 @@ class FPN3d(nn.Module):
         # feature_map = F.adaptive_avg_pool2d(x, (5, 5))
         x = self.fc(torch.flatten(self.GeM(x), 1))
 
-        x,_ = self.gnn(self.g, x)
+        if flag:
+            x, _ = self.gnn(self.g, x)
         return x, None

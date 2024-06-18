@@ -243,13 +243,13 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
                     )
                     database_embeddings = embeddings["embedding"][1 : batch["positives_mask"].shape[0]]
                     sim_mat = cos(query_embeddings, database_embeddings)
-                    print(smoothAP(sim_mat, positives_mask[0].unsqueeze(0)))
-                    loss, temp_stats, _ = loss_fn(
-                        embeddings, positives_mask, negatives_mask
-                    )
+                    loss = 1- smoothAP(sim_mat, positives_mask[0].unsqueeze(0))
+                    # loss, temp_stats, _ = loss_fn(
+                    #     embeddings, positives_mask, negatives_mask
+                    # )
 
-                    temp_stats = tensors_to_numbers(temp_stats)
-                    batch_stats.update(temp_stats)
+                    # temp_stats = tensors_to_numbers(temp_stats)
+                    # batch_stats.update(temp_stats)
                     batch_stats["loss"] = loss.item()
 
                     if phase == "train":
