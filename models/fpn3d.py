@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
@@ -6,6 +7,9 @@ from models.resnet3d import resnet18, resnet10
 from einops.layers.torch import Rearrange
 from torchvision.models._api import Weights, WeightsEnum
 from functools import partial
+
+from dgl.nn.pytorch import SAGEConv
+import dgl
 
 
 class GeM(nn.Module):
@@ -116,6 +120,62 @@ class FPN(nn.Module):
         return x, None
 
 
+class MLP(nn.Module):
+    def __init__(self, in_feats, out_feats) -> None:
+        super(MLP, self).__init__()
+        self.linear1 = nn.Linear(in_feats, 256)
+        self.linear2 = nn.Linear(256, 128)
+        self.linear3 = nn.Linear(128, 64)
+        self.linear4 = nn.Linear(64, 1)
+
+    def forward(self, f):
+        h = self.linear1(f)
+        h = F.leaky_relu(h)
+        h = self.linear2(h)
+        h = F.leaky_relu(h)
+        h = self.linear3(h)
+        h = F.leaky_relu(h)
+        h = self.linear4(h)
+        # h = F.relu(h)
+        h = torch.sigmoid(h)
+        # h = F.relu(h)
+        # return torch.sigmoid(h)
+        return h
+
+class myGNN(nn.Module):
+    def __init__(self, in_feats, h_feats, out_feats):
+        super(myGNN, self).__init__()
+
+        self.MLP = MLP(in_feats, 1)
+        self.BN = nn.BatchNorm1d(in_feats)
+        self.conv1 = SAGEConv(in_feats, in_feats, "mean")
+        # self.conv2 = SAGEConv(in_feats, in_feats, "mean")
+
+    def apply_edges(self, edges):
+        h_u = edges.src["x"]
+        h_v = edges.dst["x"]
+        # score = self.MLP(torch.cat((h_u, h_v), 1))
+        score = self.MLP(h_u - h_v)
+        return {"score": score}
+
+    def forward(self, g, x):
+        # x = self.BN(x)
+
+        with g.local_scope():
+            g.ndata["x"] = x
+            g.apply_edges(self.apply_edges)
+            e = g.edata["score"]
+
+        A = self.conv1(g, x, e)
+        A = F.leaky_relu(A)
+        # A = self.conv2(g, A, e)
+        # A = F.leaky_relu(A)
+        A = F.normalize(A, dim=1)
+        # pred2, A2 = self.conv2(g, pred)
+        return A, e
+
+
+
 class FPN3d(nn.Module):
 
     def __init__(self):
@@ -153,6 +213,14 @@ class FPN3d(nn.Module):
         self.fc = nn.Linear(256, 256)
         self.fusion = nn.Conv3d(256, 256, kernel_size=(2, 1, 1))
 
+        src = np.array([list(range(9)) for _ in range(9)]).reshape((-1,))
+        dst = np.repeat(np.array(list(range(9))), 9)
+
+        g = dgl.graph((src, dst))
+        self.g = g.to("cuda")
+
+        self.gnn = myGNN(256, 256, 128)
+
     def forward(self, x):
         x = x["images"]
         # x = x
@@ -171,4 +239,6 @@ class FPN3d(nn.Module):
         x = self.fusion(torch.stack((feature_map_2, feature_map_3), dim=2)).squeeze(2)
         # feature_map = F.adaptive_avg_pool2d(x, (5, 5))
         x = self.fc(torch.flatten(self.GeM(x), 1))
+
+        x,_ = self.gnn(self.g, x)
         return x, None
