@@ -4,9 +4,6 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-import MinkowskiEngine as ME
-
-from datasets.oxford import OxfordDataset
 from datasets.seven_scenes import SevenScenesDatasets
 from datasets.augmentation import (
     TrainTransform,

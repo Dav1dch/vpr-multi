@@ -113,6 +113,9 @@ class BatchSampler(Sampler):
 
             self.batch_idx.append(current_batch)
 
+            # np.random.shuffle(self.batch_idx)
+            # self.batch_idx = self.batch_idx.reshape((-1, 8, 9)).tolist()
+
 
         # assert self.k == 2, 'sampler can sample only k=2 elements from the same class'
         #
