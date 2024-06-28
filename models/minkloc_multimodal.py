@@ -82,7 +82,7 @@ class MinkLocMultimodal(torch.nn.Module):
                 "Unsupported final block: {}".format(self.final_block)
             )
 
-    def forward(self, batch, flag=True):
+    def forward(self, batch, flag=False):
         y = {}
         if self.image_fe is not None:
             image_embedding, feature_map = self.image_fe(batch, flag)

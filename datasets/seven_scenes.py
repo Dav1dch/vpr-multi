@@ -75,7 +75,7 @@ class SevenScenesDatasets(Dataset):
                         ].rel_scan_filepath
                     )
                 )
-                for i in range(0, 2)
+                for i in range(0, 1)
                 # self.image_transform(
                 #     self.load_img(self.queries[max(ndx - 2, 0)].rel_scan_filepath)
                 # ),

@@ -3,7 +3,6 @@
 
 import random
 import copy
-import numpy as np
 
 from torch.utils.data import Sampler
 
@@ -49,23 +48,22 @@ class BatchSampler(Sampler):
     # Sampler returning list of indices to form a mini-batch
     # Samples elements in groups consisting of k=2 similar elements (positives)
     # Batch has the following structure: item1_1, ..., item1_k, item2_1, ... item2_k, itemn_1, ..., itemn_k
-    # def __init__(self, dataset: OxfordDataset, batch_size: int, batch_size_limit: int = None,
-    #              batch_expansion_rate: float = None, max_batches: int = None):
-    def __init__(self, dataset: OxfordDataset):
-        # if batch_expansion_rate is not None:
-        #     assert batch_expansion_rate > 1., 'batch_expansion_rate must be greater than 1'
-        #     assert batch_size <= batch_size_limit, 'batch_size_limit must be greater or equal to batch_size'
-        #
-        # self.batch_size = batch_size
-        # self.batch_size_limit = batch_size_limit
-        # self.batch_expansion_rate = batch_expansion_rate
-        # self.max_batches = max_batches
-        # self.k = 2  # Number of positive examples per group must be 2
-        # if self.batch_size < 2 * self.k:
-        #     self.batch_size = 2 * self.k
-        #     print('WARNING: Batch too small. Batch size increased to {}.'.format(self.batch_size))
-        #
+    def __init__(self, dataset: OxfordDataset, batch_size: int, batch_size_limit: int = None,
+                 batch_expansion_rate: float = None, max_batches: int = None):
+        if batch_expansion_rate is not None:
+            assert batch_expansion_rate > 1., 'batch_expansion_rate must be greater than 1'
+            assert batch_size <= batch_size_limit, 'batch_size_limit must be greater or equal to batch_size'
+
+        self.batch_size = batch_size
+        self.batch_size_limit = batch_size_limit
+        self.batch_expansion_rate = batch_expansion_rate
+        self.max_batches = max_batches
         self.dataset = dataset
+        self.k = 2  # Number of positive examples per group must be 2
+        if self.batch_size < 2 * self.k:
+            self.batch_size = 2 * self.k
+            print('WARNING: Batch too small. Batch size increased to {}.'.format(self.batch_size))
+
         self.batch_idx = []     # Index of elements in each batch (re-generated every epoch)
         self.elems_ndx = list(self.dataset.queries)    # List of point cloud indexes
 
@@ -78,81 +76,63 @@ class BatchSampler(Sampler):
     def __len(self):
         return len(self.batch_idx)
 
-    # def expand_batch(self):
-    #     if self.batch_expansion_rate is None:
-    #         print('WARNING: batch_expansion_rate is None')
-    #         return
-    #
-    #     if self.batch_size >= self.batch_size_limit:
-    #         return
-    #
-    #     old_batch_size = self.batch_size
-    #     self.batch_size = int(self.batch_size * self.batch_expansion_rate)
-    #     self.batch_size = min(self.batch_size, self.batch_size_limit)
-    #     print('=> Batch size increased from: {} to {}'.format(old_batch_size, self.batch_size))
+    def expand_batch(self):
+        if self.batch_expansion_rate is None:
+            print('WARNING: batch_expansion_rate is None')
+            return
+
+        if self.batch_size >= self.batch_size_limit:
+            return
+
+        old_batch_size = self.batch_size
+        self.batch_size = int(self.batch_size * self.batch_expansion_rate)
+        self.batch_size = min(self.batch_size, self.batch_size_limit)
+        print('=> Batch size increased from: {} to {}'.format(old_batch_size, self.batch_size))
 
     def generate_batches(self):
         # Generate training/evaluation batches.
         # batch_idx holds indexes of elements in each batch as a list of lists
         self.batch_idx = []
 
-        # unused_elements_ndx = ListDict(self.elems_ndx)
-        # current_batch = []
+        unused_elements_ndx = ListDict(self.elems_ndx)
+        current_batch = []
 
-        for i in range(len(self.dataset)):
-            current_batch = []
-            current_batch.append(i)
-            index = np.array(list(range(len(self.dataset))))
-            positives = self.dataset.get_positives(i)
-            if positives.__len__() == 0:
+        assert self.k == 2, 'sampler can sample only k=2 elements from the same class'
+
+        while True:
+            if len(current_batch) >= self.batch_size or len(unused_elements_ndx) == 0:
+                # Flush out batch, when it has a desired size, or a smaller batch, when there's no more
+                # elements to process
+                if len(current_batch) >= 2*self.k:
+                    # Ensure there're at least two groups of similar elements, otherwise, it would not be possible
+                    # to find negative examples in the batch
+                    assert len(current_batch) % self.k == 0, 'Incorrect bach size: {}'.format(len(current_batch))
+                    self.batch_idx.append(current_batch)
+                    current_batch = []
+                    if (self.max_batches is not None) and (len(self.batch_idx) >= self.max_batches):
+                        break
+                if len(unused_elements_ndx) == 0:
+                    break
+
+            # Add k=2 similar elements to the batch
+            selected_element = unused_elements_ndx.choose_random()
+            unused_elements_ndx.remove(selected_element)
+            positives = self.dataset.get_positives(selected_element)
+            if len(positives) == 0:
+                # Broken dataset element without any positives
                 continue
-            non_negatives = self.dataset.get_non_negatives(i)
-            negatives = np.delete(index, non_negatives-1)
-            current_batch.extend(np.random.choice(positives,4))
-            current_batch.extend(np.random.choice(negatives,4))
 
-            self.batch_idx.append(current_batch)
+            unused_positives = [e for e in positives if e in unused_elements_ndx]
+            # If there're unused elements similar to selected_element, sample from them
+            # otherwise sample from all similar elements
+            if len(unused_positives) > 0:
+                second_positive = random.choice(unused_positives)
+                unused_elements_ndx.remove(second_positive)
+            else:
+                second_positive = random.choice(list(positives))
 
-            # np.random.shuffle(self.batch_idx)
-            # self.batch_idx = self.batch_idx.reshape((-1, 8, 9)).tolist()
+            current_batch += [selected_element, second_positive]
 
-
-        # assert self.k == 2, 'sampler can sample only k=2 elements from the same class'
-        #
-        # while True:
-        #     if len(current_batch) >= self.batch_size or len(unused_elements_ndx) == 0:
-        #         # Flush out batch, when it has a desired size, or a smaller batch, when there's no more
-        #         # elements to process
-        #         if len(current_batch) >= 2*self.k:
-        #             # Ensure there're at least two groups of similar elements, otherwise, it would not be possible
-        #             # to find negative examples in the batch
-        #             assert len(current_batch) % self.k == 0, 'Incorrect bach size: {}'.format(len(current_batch))
-        #             self.batch_idx.append(current_batch)
-        #             current_batch = []
-        #             if (self.max_batches is not None) and (len(self.batch_idx) >= self.max_batches):
-        #                 break
-        #         if len(unused_elements_ndx) == 0:
-        #             break
-        #
-        #     # Add k=2 similar elements to the batch
-        #     selected_element = unused_elements_ndx.choose_random()
-        #     unused_elements_ndx.remove(selected_element)
-        #     positives = self.dataset.get_positives(selected_element)
-        #     if len(positives) == 0:
-        #         # Broken dataset element without any positives
-        #         continue
-        #
-        #     unused_positives = [e for e in positives if e in unused_elements_ndx]
-        #     # If there're unused elements similar to selected_element, sample from them
-        #     # otherwise sample from all similar elements
-        #     if len(unused_positives) > 0:
-        #         second_positive = random.choice(unused_positives)
-        #         unused_elements_ndx.remove(second_positive)
-        #     else:
-        #         second_positive = random.choice(list(positives))
-        #
-        #     current_batch += [selected_element, second_positive]
-        #
-        # for batch in self.batch_idx:
-        #     assert len(batch) % self.k == 0, 'Incorrect bach size: {}'.format(len(batch))
+        for batch in self.batch_idx:
+            assert len(batch) % self.k == 0, 'Incorrect bach size: {}'.format(len(batch))
 

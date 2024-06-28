@@ -1,6 +1,7 @@
 # Author: Jacek Komorowski
 # Warsaw University of Technology
 
+from models.dinov2 import DINOv2
 from models.minkloc import MinkLoc
 from models.minkloc_multimodal import MinkLocMultimodal, ResnetFPN
 from models.fpn3d import FPN3d
@@ -30,6 +31,12 @@ def model_factory(params: MinkLocParams):
     elif params.model_params.model == "fpn3d":
         image_fe_size = 256
         image_fe = FPN3d()
+        model = MinkLocMultimodal(
+            None, 0, image_fe, image_fe_size, output_dim=image_fe_size
+        )
+    elif params.model_params.model == "dino":
+        image_fe_size = 768
+        image_fe = DINOv2()
         model = MinkLocMultimodal(
             None, 0, image_fe, image_fe_size, output_dim=image_fe_size
         )

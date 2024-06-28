@@ -221,7 +221,7 @@ class FPN3d(nn.Module):
 
         self.gnn = myGNN(256, 256, 128)
 
-    def forward(self, x, flag=True):
+    def forward(self, x, flag=False):
         x = x["images"]
         # x = x
         # Bottom-up using backbone

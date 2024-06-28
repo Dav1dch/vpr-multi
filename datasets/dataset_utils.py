@@ -4,6 +4,9 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+import MinkowskiEngine as ME
+
+from datasets.oxford import OxfordDataset
 from datasets.seven_scenes import SevenScenesDatasets
 from datasets.augmentation import (
     TrainTransform,
@@ -28,13 +31,36 @@ def make_datasets(params: MinkLocParams, debug=False):
     else:
         image_train_transform = None
         image_val_transform = None
+
+    # datasets["train"] = OxfordDataset(
+    #     params.dataset_folder,
+    #     params.train_file,
+    #     image_path=params.image_path,
+    #     lidar2image_ndx_path=params.lidar2image_ndx_path,
+    #     transform=train_transform,
+    #     set_transform=train_set_transform,
+    #     image_transform=image_train_transform,
+    #     use_cloud=params.use_cloud,
+    # )
     datasets["train"] = SevenScenesDatasets(
         params.dataset_folder, params.train_file, MinimizeTransform()
     )
+    # val_transform = None
+    # if params.val_file is not None:
+    #     datasets["val"] = OxfordDataset(
+    #         params.dataset_folder,
+    #         params.val_file,
+    #         image_path=params.image_path,
+    #         lidar2image_ndx_path=params.lidar2image_ndx_path,
+    #         transform=val_transform,
+    #         set_transform=train_set_transform,
+    #         image_transform=image_val_transform,
+    #         use_cloud=params.use_cloud,
+    #     )
     return datasets
 
 
-def make_collate_fn(dataset: SevenScenesDatasets, mink_quantization_size=None):
+def make_collate_fn(dataset: OxfordDataset, mink_quantization_size=None):
     # set_transform: the transform to be applied to all batch elements
     def collate_fn(data_list):
         # Constructs a batch object
@@ -81,10 +107,10 @@ def make_dataloaders(params: MinkLocParams, debug=False):
 
     dataloders = {}
     train_sampler = BatchSampler(
-        datasets["train"]
-        # batch_size=params.batch_size,
-        # batch_size_limit=params.batch_size_limit,
-        # batch_expansion_rate=params.batch_expansion_rate,
+        datasets["train"],
+        batch_size=params.batch_size,
+        batch_size_limit=params.batch_size_limit,
+        batch_expansion_rate=params.batch_expansion_rate,
     )
     # Collate function collates items into a batch and applies a 'set transform' on the entire batch
     train_collate_fn = make_collate_fn(
@@ -99,7 +125,7 @@ def make_dataloaders(params: MinkLocParams, debug=False):
     )
 
     if "val" in datasets:
-        val_sampler = BatchSampler(datasets["val"])
+        val_sampler = BatchSampler(datasets["val"], batch_size=params.val_batch_size)
         # Collate function collates items into a batch and applies a 'set transform' on the entire batch
         # Currently validation dataset has empty set_transform function, but it may change in the future
         val_collate_fn = make_collate_fn(
@@ -113,7 +139,7 @@ def make_dataloaders(params: MinkLocParams, debug=False):
             pin_memory=True,
         )
 
-    return dataloders
+    return dataloders, datasets
 
 
 def in_sorted_array(e: int, array: np.ndarray) -> bool:

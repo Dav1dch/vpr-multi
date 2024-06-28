@@ -18,7 +18,6 @@ from misc.utils import MinkLocParams, get_datetime
 from models.loss import make_loss
 from models.model_factory import model_factory
 from models.minkloc_multimodal import MinkLocMultimodal
-from gnn_loss import SmoothAP
 
 
 VERBOSE = False
@@ -104,10 +103,12 @@ def tensors_to_numbers(stats):
     return stats
 
 
-def do_train(dataloaders, params: MinkLocParams, debug=False):
+def do_train(dataloaders, datasets, params: MinkLocParams, debug=False):
     # Create model class
     s = get_datetime()
     model = model_factory(params)
+    # model.image_fe.init_cluster(datasets["train"])
+    # model.image_fe.construct_model()
     model_name = "model_" + params.model_params.model + "_" + s
     print("Model name: {}".format(model_name))
     weights_path = create_weights_folder()
@@ -127,10 +128,7 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
 
     print("Model device: {}".format(device))
 
-    import torch.nn as nn
     loss_fn = make_loss(params)
-    cos = nn.CosineSimilarity(dim=1).cuda()
-    smoothAP = SmoothAP()
 
     params_l = []
     if isinstance(model, MinkLocMultimodal):
@@ -197,10 +195,10 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
 
     # Training statistics
     stats = {"train": [], "val": [], "eval": []}
-    embeddings = None
+    maxLoss = 10
     minRecall = 0
 
-    for epoch in tqdm.tqdm(range(1, params.epochs + 1), ncols=80):
+    for epoch in tqdm.tqdm(range(1, params.epochs + 1)):
         for phase in phases:
             if phase == "train":
                 model.train()
@@ -237,19 +235,12 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
                 with torch.set_grad_enabled(phase == "train"):
                     # Compute embeddings of all elements
                     embeddings = model(batch)
-
-                    query_embeddings = torch.repeat_interleave(
-                        embeddings["embedding"][0].unsqueeze(0), batch["positives_mask"].shape[0] - 1, 0
+                    loss, temp_stats, _ = loss_fn(
+                        embeddings, positives_mask, negatives_mask
                     )
-                    database_embeddings = embeddings["embedding"][1 : batch["positives_mask"].shape[0]]
-                    sim_mat = cos(query_embeddings, database_embeddings)
-                    loss = 1- smoothAP(sim_mat, positives_mask[0].unsqueeze(0))
-                    # loss, temp_stats, _ = loss_fn(
-                    #     embeddings, positives_mask, negatives_mask
-                    # )
 
-                    # temp_stats = tensors_to_numbers(temp_stats)
-                    # batch_stats.update(temp_stats)
+                    temp_stats = tensors_to_numbers(temp_stats)
+                    batch_stats.update(temp_stats)
                     batch_stats["loss"] = loss.item()
 
                     if phase == "train":
@@ -289,6 +280,12 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
             scheduler.step()
 
         loss_metrics = {"train": stats["train"][-1]["loss"]}
+
+        if loss_metrics["train"] < maxLoss and loss_metrics["train"] != 0:
+            print(loss_metrics)
+            maxLoss = loss_metrics["train"]
+            final_model_path = model_pathname + "_best.pth"
+            torch.save(model.state_dict(), final_model_path)
         if "val" in phases:
             loss_metrics["val"] = stats["val"][-1]["loss"]
         writer.add_scalars("Loss", loss_metrics, epoch)
@@ -351,6 +348,7 @@ def do_train(dataloaders, params: MinkLocParams, debug=False):
     torch.save(model.state_dict(), final_model_path)
 
     stats = {"train_stats": stats, "params": params}
+    # model.load_state_dict(torch.load(model_pathname + "_best.pth"))
 
     # Evaluate the final model
     model.eval()
