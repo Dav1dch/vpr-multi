@@ -1,8 +1,15 @@
+# Developed by Junyi Ma, Xieyuanli Chen
+# This file is covered by the LICENSE file in the root of the project SeqOT: https://github.com/BIT-MJY/SeqOT
+# SeqOT is the sequence enhanced version of our previous work OverlapTransformer: https://github.com/haomo-ai/OverlapTransformer
+# Brief: architecture of SeqOT
+
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import math
-
+# sys.path.append('../tools/')
+# from modules.netvlad import NetVLADLoupe
+import torch.nn.functional as F
 
 class GatingContext(nn.Module):
     def __init__(self, dim, add_batch_norm=True):
@@ -100,132 +107,86 @@ class NetVLADLoupe(nn.Module):
             vlad = self.context_gating(vlad)
 
         return vlad
+class featureExtracter(nn.Module):
+    def __init__(self, seqL=5):
+        super(featureExtracter, self).__init__()
 
-DINOV2_ARCHS = {
-    'dinov2_vits14': 384,
-    'dinov2_vitb14': 768,
-    'dinov2_vitl14': 1024,
-    'dinov2_vitg14': 1536,
-}
+        self.seqL = seqL
 
-class DINOv2(nn.Module):
-    """
-    DINOv2 model
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=(2,1), stride=(2,1), bias=False)
+        self.conv1_add = nn.Conv2d(16, 16, kernel_size=(5,1), stride=(1,1), bias=False)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv5 = nn.Conv2d(64, 128, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv6 = nn.Conv2d(128, 128, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv7 = nn.Conv2d(128, 128, kernel_size=(1,1), stride=(2,1), bias=False)
 
-    Args:
-        model_name (str): The name of the model architecture 
-            should be one of ('dinov2_vits14', 'dinov2_vitb14', 'dinov2_vitl14', 'dinov2_vitg14')
-        num_trainable_blocks (int): The number of last blocks in the model that are trainable.
-        norm_layer (bool): If True, a normalization layer is applied in the forward pass.
-        return_token (bool): If True, the forward pass returns both the feature map and the token.
-    """
-    def __init__(
-            self,
-        model_name:str='dinov2_vitb14',
-        num_trainable_blocks:int=2  ,
-        norm_layer:bool=True,
-        return_token:bool=False
-        ):
-        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
 
-        assert model_name in DINOV2_ARCHS.keys(), f'Unknown model name {model_name}'
-        self.model = torch.hub.load('facebookresearch/dinov2', model_name)
-        self.num_channels = DINOV2_ARCHS[model_name]
-        self.num_trainable_blocks = num_trainable_blocks
-        self.norm_layer = norm_layer
-        self.return_token = return_token
+        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=4, dim_feedforward=1024, activation='relu', batch_first=False,dropout=0.)
+        self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=1)
 
-
-    def forward(self, x: torch.Tensor, flag: bool):
-        """
-        The forward method for the DINOv2 class
-
-        Parameters:
-            x (torch.Tensor): The input tensor [B, 3, H, W]. H and W should be divisible by 14.
-
-        Returns:
-            f (torch.Tensor): The feature map [B, C, H // 14, W // 14].
-            t (torch.Tensor): The token [B, C]. This is only returned if return_token is True.
-        """
-
-        # x: torch.Tensor = x["images"]
-        # x = x.squeeze(1)
-        B, C, H, W = x.shape
-
-        x = self.model.prepare_tokens_with_masks(x)
-        
-        # First blocks are frozen
-        with torch.no_grad():
-            for blk in self.model.blocks[:-self.num_trainable_blocks]:
-                x = blk(x)
-        x = x.detach()
-
-        # Last blocks are trained
-        for blk in self.model.blocks[-self.num_trainable_blocks:]:
-            x = blk(x)
-
-        if self.norm_layer:
-            x = self.model.norm(x)
-        
-        t = x[:, 0]
-        f = x[:, 1:]
-
-        # Reshape to (B, C, H, W)
-        # f = f.reshape((B, H // 14, W // 14, self.num_channels)).permute(0, 3, 1, 2)
-        f = f.reshape((B, 1, -1, self.num_channels)).permute(0, 3, 1, 2)
-        x = self.model.head(x)
-
-        if self.return_token:
-            return f, t
-        return f, None
-
-class SeqDino(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.dino = DINOv2()
-        encoder_layer2 = nn.TransformerEncoderLayer(d_model=768, nhead=4, dim_feedforward=1024, activation='relu', batch_first=False,dropout=0.)
+        encoder_layer2 = nn.TransformerEncoderLayer(d_model=512, nhead=4, dim_feedforward=1024, activation='relu', batch_first=False,dropout=0.)
         self.transformer_encoder2 = torch.nn.TransformerEncoder(encoder_layer2, num_layers=1)
-        self.net_vlad = NetVLADLoupe(feature_size=768, max_samples=int(640*2), cluster_size=64,  # before 11.12 --- 64
+
+        self.convLast1 = nn.Conv2d(128, 256, kernel_size=(1,1), stride=(1,1), bias=False)
+        self.convLast2 = nn.Conv2d(512, 512, kernel_size=(1,1), stride=(1,1), bias=False)
+
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax()
+
+        self.net_vlad = NetVLADLoupe(feature_size=512, max_samples=int(900*self.seqL), cluster_size=64,  # before 11.12 --- 64
                                      output_dim=256, gating=True, add_batch_norm=False,   # output_dim=512
                                      is_training=True)
 
-    def forward(self, x, flag):
-        x: torch.Tensor = x["images"]
-        out_l_seq= None
-        for i in range(x.shape[1]):
-            seq: torch.Tensor = x[:, i]
-            seq, _ = self.dino(seq, flag)
-            if out_l_seq == None:
-                out_l_seq = seq
+
+    def forward(self, x_l: torch.Tensor):
+        out_l_seq = None
+        for i in range(self.seqL):
+
+            one_x_l_from_seq = x_l[:, i:(i+1), :, :]
+
+            out_l = self.relu(self.conv1(one_x_l_from_seq))
+            out_l = self.relu(self.conv1_add(out_l))
+            out_l = self.relu(self.conv2(out_l))
+            out_l = self.relu(self.conv3(out_l))
+            out_l = self.relu(self.conv4(out_l))
+            out_l = self.relu(self.conv5(out_l))
+            out_l = self.relu(self.conv6(out_l))
+            out_l = self.relu(self.conv7(out_l))
+
+
+            out_l_1 = out_l.permute(0,1,3,2)
+            out_l_1 = self.relu(self.convLast1(out_l_1))
+            out_l = out_l_1.squeeze(3)
+            out_l = out_l.permute(2, 0, 1)
+            out_l = self.transformer_encoder(out_l)
+            out_l = out_l.permute(1, 2, 0)
+            out_l = out_l.unsqueeze(3)
+            out_l = torch.cat((out_l_1, out_l), dim=1)
+            out_l = self.relu(self.convLast2(out_l))
+            out_l = F.normalize(out_l, dim=1)
+            if i==0:
+                out_l_seq = out_l
             else:
-                out_l_seq = torch.cat((out_l_seq, seq), dim=-1)
-        out_l_seq = out_l_seq.squeeze(2)
+                print(out_l_seq.shape)
+                out_l_seq: torch.Tensor = torch.cat((out_l_seq, out_l), dim=-2)
+
+        out_l_seq = out_l_seq.squeeze(3)
         out_l_seq = out_l_seq.permute(2, 0, 1)
         out_l_seq = self.transformer_encoder2(out_l_seq)
         out_l_seq = out_l_seq.permute(1, 2, 0)
         out_l_seq = out_l_seq.unsqueeze(3)
+        print(out_l_seq.shape)
         out_l_seq = self.net_vlad(out_l_seq)
-        # out_l_seq = F.normalize(out_l_seq, dim=1)
-        return out_l_seq, None
+        out_l_seq = F.normalize(out_l_seq, dim=1)
+        print(out_l_seq.shape)
+        return out_l_seq
 
 
 
-
-def test():
-    model = DINOv2()
-    model = model.cuda()
-    print(model.model)
-    img = {"images" : torch.rand((1, 1, 3, 420, 420)).cuda()}
-    print(model(img, None).shape)
-    print(model.model(img["images"].squeeze(1)).shape)
-    return
-
-def testseq():
-    model = SeqDino().cuda()
-    img = {"images": torch.rand((1, 5, 3, 224, 224)).cuda()}
-    model(img, False)
-
-
-
-if __name__ == "__main__":
-    testseq()
+if __name__ == '__main__':
+    amodel = featureExtracter(5).cuda()
+    test = torch.rand((1, 5, 32, 900)).cuda()
+    print(amodel(test).shape)

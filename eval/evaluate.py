@@ -154,7 +154,7 @@ def get_latent_vectors(model, set, device, params):
                     set[max(elem_ndx - i, (elem_ndx // 1000) * 1000)]["query"],
                     params,
                 )
-                for i in range(0, 1)
+                for i in range(0, 5)
             ]
         )
 

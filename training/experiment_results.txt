@@ -21,3 +21,5 @@ minklocrgb.txt, config_baseline_rgb.txt, model_fpn3d_20240319_2327, nan, nan
 minklocrgb.txt, config_baseline_rgb.txt, model_fpn3d_20240409_0048, nan, nan
 minklocrgb.txt, config_baseline_rgb.txt, model_fpn3d_20240619_0315, nan, nan
 minklocrgb.txt, config_baseline_rgb.txt, model_dino_20240627_2350, nan, nan
+minklocrgb.txt, config_baseline_rgb.txt, model_dino_20240628_1456, nan, nan
+minklocrgb.txt, config_baseline_rgb.txt, model_dino_20240628_2338, nan, nan

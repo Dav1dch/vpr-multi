@@ -65,7 +65,7 @@ class SevenScenesDatasets(Dataset):
         #     if self.image_transform is not None:
         #         img = self.image_transform(img)
         #     result["image"] = img
-        img = self.image_transform(self.load_img(self.queries[ndx].rel_scan_filepath))
+        # img = self.image_transform(self.load_img(self.queries[ndx].rel_scan_filepath))
         imgs = torch.stack(
             [
                 self.image_transform(
@@ -75,7 +75,7 @@ class SevenScenesDatasets(Dataset):
                         ].rel_scan_filepath
                     )
                 )
-                for i in range(0, 1)
+                for i in range(0, 5)
                 # self.image_transform(
                 #     self.load_img(self.queries[max(ndx - 2, 0)].rel_scan_filepath)
                 # ),
@@ -100,6 +100,12 @@ class SevenScenesDatasets(Dataset):
         return self.queries[ndx].non_negatives
 
     def load_img(self, filename):
+        img = Image.open(filename)
+        return img
+
+    def load_depth_img(self, filename):
+        filename.replace("color", 'depth')
+        print(filename)
         img = Image.open(filename)
         return img
 
