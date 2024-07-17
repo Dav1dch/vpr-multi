@@ -8,6 +8,7 @@ from models.fpn3d import FPN3d
 from models.ViT import ViTSec
 from models.sec import fpn, sec, cnnRnn, fpn2
 from misc.utils import MinkLocParams
+from models.seqot import seqot
 import torch
 
 
@@ -37,6 +38,13 @@ def model_factory(params: MinkLocParams):
     elif params.model_params.model == "dino":
         image_fe_size = 256
         image_fe = SeqDino()
+        model = MinkLocMultimodal(
+            None, 0, image_fe, image_fe_size, output_dim=image_fe_size
+        )
+
+    elif params.model_params.model == "seqot":
+        image_fe_size = 256
+        image_fe = seqot(5)
         model = MinkLocMultimodal(
             None, 0, image_fe, image_fe_size, output_dim=image_fe_size
         )

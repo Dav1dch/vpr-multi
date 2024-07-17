@@ -35,7 +35,8 @@ class TrainTransform:
 
 class MinimizeTransform:
     def __init__(self):
-        t = [transforms.Resize([224, 224]),transforms.ToTensor()]
+        t = [transforms.ToTensor()]
+        # t = [transforms.Resize([224, 224]),transforms.ToTensor()]
         self.transform = transforms.Compose(t)
 
     def __call__(self, e):

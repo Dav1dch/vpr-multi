@@ -100,7 +100,7 @@ def evaluate_dataset(model, device, params, database_sets, query_sets, silent=Tr
 
 def load_data_item(file_name, params):
     # returns Nx3 matrix
-    file_path = os.path.join(params.dataset_folder, file_name)
+    file_path = os.path.join(params.dataset_folder, file_name).replace("color", "depth")
 
     result = {}
     # if params.use_cloud:
@@ -127,7 +127,7 @@ def load_data_item(file_name, params):
     img = Image.open(file_path)
     transform = MinimizeTransform()
     # result["image"] = transform(img)
-    result = transform(img)
+    result = transform(img).to(torch.float)
 
     return result
 
@@ -169,10 +169,10 @@ def get_latent_vectors(model, set, device, params):
             embedding = x["embedding"]
 
             # embedding is (1, 256) tensor
-            if params.normalize_embeddings:
-                embedding = torch.nn.functional.normalize(
-                    embedding, p=2, dim=1
-                )  # Normalize embeddings
+            # if params.normalize_embeddings:
+            #     embedding = torch.nn.functional.normalize(
+            #         embedding, p=2, dim=1
+            #     )  # Normalize embeddings
 
             end = time.time()
             times.append(end - start)

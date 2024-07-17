@@ -1,4 +1,6 @@
 # MinkLocRGB model
 [MODEL]
 # model = MinkLocRGB
-model = dino
+# model = dino
+model = seqot
+

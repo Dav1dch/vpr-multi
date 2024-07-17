@@ -107,19 +107,19 @@ class NetVLADLoupe(nn.Module):
             vlad = self.context_gating(vlad)
 
         return vlad
-class featureExtracter(nn.Module):
+class seqot(nn.Module):
     def __init__(self, seqL=5):
-        super(featureExtracter, self).__init__()
+        super(seqot, self).__init__()
 
         self.seqL = seqL
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=(2,1), stride=(2,1), bias=False)
-        self.conv1_add = nn.Conv2d(16, 16, kernel_size=(5,1), stride=(1,1), bias=False)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=(3,1), stride=(1,1), bias=False)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=(3,1), stride=(1,1), bias=False)
-        self.conv4 = nn.Conv2d(64, 64, kernel_size=(3,1), stride=(1,1), bias=False)
-        self.conv5 = nn.Conv2d(64, 128, kernel_size=(3,1), stride=(1,1), bias=False)
-        self.conv6 = nn.Conv2d(128, 128, kernel_size=(3,1), stride=(1,1), bias=False)
+        self.conv1_add = nn.Conv2d(16, 16, kernel_size=(5,1), stride=(2,1), bias=False)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=(3,1), stride=(2,1), bias=False)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=(3,1), stride=(2,1), bias=False)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size=(3,1), stride=(2,1), bias=False)
+        self.conv5 = nn.Conv2d(64, 128, kernel_size=(3,1), stride=(2,1), bias=False)
+        self.conv6 = nn.Conv2d(128, 128, kernel_size=(3,1), stride=(2,1), bias=False)
         self.conv7 = nn.Conv2d(128, 128, kernel_size=(1,1), stride=(2,1), bias=False)
 
         self.relu = nn.ReLU(inplace=True)
@@ -136,12 +136,13 @@ class featureExtracter(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax()
 
-        self.net_vlad = NetVLADLoupe(feature_size=512, max_samples=int(900*self.seqL), cluster_size=64,  # before 11.12 --- 64
+        self.net_vlad = NetVLADLoupe(feature_size=512, max_samples=int(640*self.seqL), cluster_size=64,  # before 11.12 --- 64
                                      output_dim=256, gating=True, add_batch_norm=False,   # output_dim=512
                                      is_training=True)
 
 
-    def forward(self, x_l: torch.Tensor):
+    def forward(self, x_l_: dict, flag):
+        x_l = x_l_["images"].squeeze(2)
         out_l_seq = None
         for i in range(self.seqL):
 
@@ -170,7 +171,6 @@ class featureExtracter(nn.Module):
             if i==0:
                 out_l_seq = out_l
             else:
-                print(out_l_seq.shape)
                 out_l_seq: torch.Tensor = torch.cat((out_l_seq, out_l), dim=-2)
 
         out_l_seq = out_l_seq.squeeze(3)
@@ -178,15 +178,13 @@ class featureExtracter(nn.Module):
         out_l_seq = self.transformer_encoder2(out_l_seq)
         out_l_seq = out_l_seq.permute(1, 2, 0)
         out_l_seq = out_l_seq.unsqueeze(3)
-        print(out_l_seq.shape)
         out_l_seq = self.net_vlad(out_l_seq)
         out_l_seq = F.normalize(out_l_seq, dim=1)
-        print(out_l_seq.shape)
-        return out_l_seq
+        return out_l_seq, None
 
 
 
 if __name__ == '__main__':
-    amodel = featureExtracter(5).cuda()
+    amodel = seqot(5).cuda()
     test = torch.rand((1, 5, 32, 900)).cuda()
     print(amodel(test).shape)
